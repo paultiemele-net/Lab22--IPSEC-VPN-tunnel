@@ -1,0 +1,150 @@
+!========================================
+! IPsec VPN Lab – Router-to-Router VPN
+!========================================
+! Description:
+! This lab demonstrates the configuration of an IPsec VPN tunnel between two remote LANs
+! through intermediate routers. OSPF is used for dynamic WAN connectivity, and static routes
+! allow the VPN to know the opposite LAN networks.
+!
+! LAN1: PC1 10.10.10.2/24 – Gateway 10.10.10.1
+! LAN2: PC2 40.40.40.2/24 – Gateway 40.40.40.1
+! WAN1: 20.20.20.0/24
+! WAN2: 30.30.30.0/24
+! VPN Tunnel: IPsec between R1 and R3
+
+!==========================
+! Router 1 Configuration
+!==========================
+conf t
+
+! LAN interface
+int e0/0
+ ip address 10.10.10.1 255.255.255.0
+ no shut
+ exit
+
+! WAN interface
+int e0/1
+ ip address 20.20.20.1 255.255.255.0
+ no shut
+ exit
+
+! DHCP for LAN
+ip dhcp excluded-address 10.10.10.1
+ip dhcp pool LAN1_POOL
+ network 10.10.10.0 255.255.255.0
+ default-router 10.10.10.1
+ exit
+
+! OSPF on WAN
+router ospf 1
+ network 20.20.20.0 0.0.0.255 area 0
+ exit
+
+! Static route to remote LAN for VPN
+ip route 40.40.40.0 255.255.255.0 30.30.30.1
+
+! IPsec VPN Configuration to R3
+ip access-list extended VPN-R1-R3
+ permit ip 10.10.10.0 0.0.0.255 40.40.40.0 0.0.0.255
+ exit
+
+crypto isakmp policy 10
+ encryption aes 256
+ authentication pre-share
+ group 5
+ exit
+
+crypto isakmp key type1998 address 30.30.30.1
+
+crypto ipsec transform-set R1-R3 esp-aes 256 esp-sha-hmac
+
+crypto map VPN-MAP 10 ipsec-isakmp
+ set peer 30.30.30.1
+ set transform-set R1-R3
+ set pfs group5
+ set security-association lifetime seconds 86400
+ match address VPN-R1-R3
+
+int e0/1
+ crypto map VPN-MAP
+ exit
+
+!==========================
+! Router 2 Configuration
+!==========================
+conf t
+int e0/0
+ ip address 20.20.20.2 255.255.255.0
+ no shut
+ exit
+
+int e0/1
+ ip address 30.30.30.2 255.255.255.0
+ no shut
+ exit
+
+! OSPF on WAN
+router ospf 1
+ network 20.20.20.0 0.0.0.255 area 0
+ network 30.30.30.0 0.0.0.255 area 0
+ exit
+
+!==========================
+! Router 3 Configuration
+!==========================
+conf t
+! LAN interface
+int e0/0
+ ip address 40.40.40.1 255.255.255.0
+ no shut
+ exit
+
+! WAN interface
+int e0/1
+ ip address 30.30.30.1 255.255.255.0
+ no shut
+ exit
+
+! OSPF on WAN
+router ospf 1
+ network 30.30.30.0 0.0.0.255 area 0
+ exit
+
+! Static route to remote LAN for VPN
+ip route 10.10.10.0 255.255.255.0 20.20.20.1
+
+! IPsec VPN Configuration to R1
+ip access-list extended VPN-R3-R1
+ permit ip 40.40.40.0 0.0.0.255 10.10.10.0 0.0.0.255
+ exit
+
+crypto isakmp policy 10
+ encryption aes 256
+ authentication pre-share
+ group 5
+ exit
+
+crypto isakmp key type1998 address 20.20.20.1
+
+crypto ipsec transform-set R3-R1 esp-aes 256 esp-sha-hmac
+
+crypto map VPN-MAP 10 ipsec-isakmp
+ set peer 20.20.20.1
+ set transform-set R3-R1
+ set pfs group5
+ set security-association lifetime seconds 86400
+ match address VPN-R3-R1
+
+int e0/1
+ crypto map VPN-MAP
+ exit
+
+!==========================
+! Verification
+!==========================
+! Commands:
+! show crypto isakmp sa
+! show crypto ipsec sa
+! ping 40.40.40.2
+! ping 10.10.10.2
